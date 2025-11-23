@@ -8,3 +8,7 @@ langchain_community>=0.0.29
 langchain_openai>=0.0.8
 psycopg2-binary
 python-dotenv
+arize-phoenix
+arize-phoenix-otel 
+openinference-instrumentation-langchain
+     
