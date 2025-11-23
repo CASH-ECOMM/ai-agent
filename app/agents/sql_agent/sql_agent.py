@@ -1,198 +1,279 @@
 import os
+import logging
 from langchain_openai import ChatOpenAI
-from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from typing import Literal
-
-from langchain.messages import AIMessage
-from langchain_core.runnables import RunnableConfig
-from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode
+from typing import Literal, TypedDict
+from langchain.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
 from dotenv import load_dotenv
-from IPython.display import Image, display
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
+from pydantic import BaseModel, Field
+from app.agents.sql_agent.agent_db_helper import get_db_connection
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# --- PostgreSQL connection setup ---
-import getpass
 
 model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-4.1-mini-2025-04-14"))
 
-# Get Postgres connection info from environment or prompt
-PG_HOST = os.getenv("PG_HOST", "localhost")
-PG_PORT = os.getenv("PG_PORT", "5555")
-PG_USER = os.getenv("PG_USER", "dev")
-PG_PASSWORD = os.getenv("PG_PASSWORD", "dev")
-PG_URL = os.getenv("PG_URL", "")
+
+# Load database schemas
+SCHEMA_FILE = os.path.join(
+    os.path.dirname(__file__), "..", "..", "scripts", "database_schemas.txt"
+)
+with open(SCHEMA_FILE, "r") as f:
+    DATABASE_SCHEMAS = f.read()
 
 
-def get_db(database: str):
-    if PG_URL:
-        uri = PG_URL
-    else:
-        uri = f"postgresql+psycopg2://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{database}"
-    db = SQLDatabase.from_uri(uri)
-    print(f"Connected to DB: {database}")
-    print(f"Dialect: {db.dialect}")
-    print(f"Available tables: {db.get_usable_table_names()}")
-    return db
+# State definition
+class SQLAgentState(TypedDict):
+    user_query: str
+    user_id: int  # User ID for security checks
+    generated_sql: str
+    target_database: str  # The database to query (catalogue_db, auction_db, payment_db)
+    validation_result: dict  # {"valid": bool, "reason": str, "corrected_sql": str}
+    query_result: str
+    error: str
 
 
-# Example: connect to a specific database (change as needed)
-DEFAULT_DB = os.getenv("PG_DATABASE", "catalogue_db")
-db = get_db(DEFAULT_DB)
+def determine_database(user_query: str) -> str:
+    """Determine which database to query based on the user's question."""
+    prompt = f"""
+        Based on the user's question, determine which database to query.
+        Available databases:
+        - catalogue_db: Contains items/products for sale
+        - auction_db: Contains auctions and bids
+        - payment_db: Contains payment and receipt information
 
-# Optionally, you can list all databases (requires superuser or proper rights)
-# with db.run("SELECT datname FROM pg_database WHERE datistemplate = false;")
+        User question: {user_query}
 
+        Return ONLY the database name (catalogue_db, auction_db, or payment_db).
+        If the query spans multiple databases, return the primary one.
+        """
 
-toolkit = SQLDatabaseToolkit(db=db, llm=model)
-tools = toolkit.get_tools()
+    response = model.invoke([HumanMessage(content=prompt)])
+    db_name = response.content.strip().lower()
+    if db_name in ["catalogue_db", "auction_db", "payment_db"]:
+        return db_name
 
-for tool in tools:
-    print(f"{tool.name}: {tool.description}\n")
-
-get_db = Too
-
-get_schema_tool = next(tool for tool in tools if tool.name == "sql_db_schema")
-get_schema_node = ToolNode([get_schema_tool], name="get_schema")
-
-run_query_tool = next(tool for tool in tools if tool.name == "sql_db_query")
-run_query_node = ToolNode([run_query_tool], name="run_query")
-
-
-# Example: create a predetermined tool call
-def list_tables(state: MessagesState):
-    tool_call = {
-        "name": "sql_db_list_tables",
-        "args": {},
-        "id": "abc123",
-        "type": "tool_call",
-    }
-    tool_call_message = AIMessage(content="", tool_calls=[tool_call])
-
-    list_tables_tool = next(tool for tool in tools if tool.name == "sql_db_list_tables")
-    tool_message = list_tables_tool.invoke(tool_call)
-    response = AIMessage(f"Available tables: {tool_message.content}")
-
-    return {"messages": [tool_call_message, tool_message, response]}
+    return None
 
 
-# Example: force a model to create a tool call
-def call_get_schema(state: MessagesState):
-    # Note that LangChain enforces that all models accept `tool_choice="any"`
-    # as well as `tool_choice=<string name of tool>`.
-    llm_with_tools = model.bind_tools([get_schema_tool], tool_choice="any")
-    response = llm_with_tools.invoke(state["messages"])
+class SQLGenerationResult(BaseModel):
+    """Structured output for SQL generation."""
 
-    return {"messages": [response]}
-
-
-def generate_query(state: MessagesState):
-    generate_query_system_prompt = """
-You are an agent designed to interact with a SQL database.
-Given an input question, create a syntactically correct {dialect} query to run, but DO NOT execute it.
-Return ONLY the SQL query as plain text, nothing else. Do not call any tools.
-Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
-
-You can order the results by a relevant column to return the most interesting examples in the database. Never query for all the columns from a specific table, only ask for the relevant columns given the question.
-
-DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
-""".format(
-        dialect=db.dialect,
-        top_k=5,
+    sql_query: str = Field(description="The generated PostgreSQL SELECT query")
+    target_database: str = Field(
+        description="The target database (catalogue_db, auction_db, or payment_db)"
     )
 
-    system_message = {
-        "role": "system",
-        "content": generate_query_system_prompt,
+
+def generate_sql(state: SQLAgentState) -> SQLAgentState:
+    """Generate SQL query based on user request and database schemas."""
+
+    user_query = state["user_query"]
+    user_id = state.get("user_id", None)
+
+    # Determine which database to use
+    target_db = determine_database(user_query)
+
+    system_prompt = f"""
+        You are an expert PostgreSQL query generator. 
+        Your task is to generate a syntactically correct PostgreSQL query.
+
+        DATABASE SCHEMAS:
+        {DATABASE_SCHEMAS}
+
+        IMPORTANT RULES:
+        1. Use ONLY PostgreSQL dialect (no MySQL or other dialects)
+        2. Generate ONLY SELECT queries (NO INSERT, UPDATE, DELETE, DROP, etc.)
+        3. Always use proper PostgreSQL syntax and functions
+        4. Limit results to 10 rows unless specified otherwise (30 rows maximum)
+        5. Use appropriate JOINs when needed across tables
+        6. Always qualify column names with table names when using JOINs
+        7. Use proper data type casting when needed (e.g., ::integer, ::timestamp)
+        8. DO NOT prefix table names with database names (e.g., use 'items' not 'catalogue_db.items')
+        9. Tables are in the 'public' schema, no need to specify schema unless required
+
+        TARGET DATABASE: {target_db}
+
+        User Query: {user_query}
+        
+        USER_ID (if applicable): {user_id}
+
+        Generate the SQL query without markdown formatting or explanations.
+        """
+
+    structured_llm = model.with_structured_output(SQLGenerationResult)
+    result = structured_llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content="Generate SQL query"),
+        ]
+    )
+
+    logger.info("GENERATED SQL:")
+    logger.info(f"\n{result.sql_query}")
+    logger.info(f"Target Database: {result.target_database}")
+
+    state["generated_sql"] = result.sql_query
+    state["target_database"] = result.target_database
+    return state
+
+
+class SQLValidationResult(BaseModel):
+    """Structured output for SQL validation."""
+
+    valid: bool = Field(description="Whether the SQL query is valid and safe")
+    reason: str = Field(description="Brief explanation of validation decision")
+    corrected_sql: str = Field(
+        description="Corrected SQL query if invalid, otherwise original SQL"
+    )
+
+
+def verify_sql(state: SQLAgentState) -> SQLAgentState:
+    """Verify the SQL query for syntax correctness and security."""
+
+    generated_sql = state["generated_sql"]
+    target_db = state["target_database"]
+    user_id = state.get("user_id", None)
+
+    verification_prompt = f"""
+        You are a SQL security and syntax validator. Analyze the following PostgreSQL query for:
+
+        1. SYNTAX CORRECTNESS:
+        - Valid PostgreSQL syntax
+        - Proper table and column names (check against schemas)
+        - Correct JOIN syntax
+        - Proper data type usage
+        - No syntax errors
+
+        2. SECURITY CHECKS:
+        - MUST be a SELECT query only (reject INSERT, UPDATE, DELETE, DROP, ALTER, etc.)
+        - Should NOT expose other users' personal information (e.g., payment details, addresses, card numbers)
+        - Queries about what users are selling or have sold are OK
+        - Queries about public auction/bid information are OK
+        - If user_id is provided, ensure the query filters appropriately for that user's data when accessing personal info
+
+        DATABASE SCHEMAS:
+        {DATABASE_SCHEMAS}
+        
+        TARGET DATABASE: {target_db}
+
+        USER_ID (if applicable): {user_id}
+        """
+
+    structured_llm = model.with_structured_output(SQLValidationResult)
+    validation_result = structured_llm.invoke(
+        [
+            SystemMessage(content=verification_prompt),
+            HumanMessage(content=f"Validate this query: {generated_sql}"),
+        ]
+    )
+
+    logger.info("VALIDATION RESULT:")
+    logger.info(f"\nValid: {validation_result.valid}")
+    logger.info(f"Reason: {validation_result.reason}")
+    logger.info(f"Corrected SQL: {validation_result.corrected_sql}")
+
+    state["validation_result"] = {
+        "valid": validation_result.valid,
+        "reason": validation_result.reason,
+        "corrected_sql": validation_result.corrected_sql,
     }
-    # Only generate the SQL as text, do not bind any tools
-    response = model.invoke([system_message] + state["messages"])
-    return {"messages": [response]}
+
+    return state
 
 
-check_query_system_prompt = """
-You are a SQL expert with a strong attention to detail.
-Double check the {dialect} query for common mistakes, including:
-- Using NOT IN with NULL values
-- Using UNION when UNION ALL should have been used
-- Using BETWEEN for exclusive ranges
-- Data type mismatch in predicates
-- Properly quoting identifiers
-- Using the correct number of arguments for functions
-- Casting to the correct data type
-- Using the proper columns for joins
+def execute_sql(state: SQLAgentState) -> SQLAgentState:
+    """Execute the validated SQL query."""
 
-If there are any of the above mistakes, rewrite the query. If there are no mistakes,
-just reproduce the original query.
+    validation = state["validation_result"]
+    if not validation["valid"]:
+        state["error"] = f"Query validation failed: {validation['reason']}"
+        state["query_result"] = ""
+        return state
 
-You will call the appropriate tool to execute the query after running this check.
-""".format(
-    dialect=db.dialect
-)
+    sql_to_execute = validation["corrected_sql"]
+    target_db = state.get("target_database")
+
+    logger.info(f"EXECUTING QUERY ON: {target_db}")
+
+    conn = get_db_connection(target_db)
+    if not conn:
+        state["error"] = f"Failed to connect to database: {target_db}"
+        state["query_result"] = ""
+        return state
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql_to_execute)
+            results = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+
+        row_count = len(results)
+
+        # Format as CSV
+        result_text = f"Found {row_count} row(s)\n\n"
+        result_text += ",".join(column_names) + "\n"
+
+        for row in results[:100]:
+            result_text += (
+                ",".join(str(val) if val is not None else "" for val in row) + "\n"
+            )
+
+        if row_count > 30:
+            result_text += f"\n... {row_count - 30} more rows not shown"
+
+        state["query_result"] = result_text
+        state["error"] = ""
+        logger.info(f"Query returned {row_count} rows")
+
+    except Exception as e:
+        error_msg = f"Query execution error: {str(e)}"
+        state["error"] = error_msg
+        state["query_result"] = ""
+        logger.error(error_msg)
+    finally:
+        conn.close()
+
+    return state
 
 
-def check_query(state: MessagesState):
-    tool_call = state["messages"][-1].tool_calls[0]
-
-    system_message = {
-        "role": "system",
-        "content": check_query_system_prompt,
-    }
-    # Generate an artificial user message to check
-    user_message = {
-        "role": "user",
-        "content": tool_call["args"]["query"],
-    }
-
-    llm_with_tools = model.bind_tools([run_query_tool], tool_choice="any")
-    response = llm_with_tools.invoke([system_message, user_message])
-    response.id = state["messages"][-1].id
-
-    return {"messages": [response]}
-
-
-def should_continue(state: MessagesState) -> Literal["__end__", "check_query"]:
-    messages = state["messages"]
-    last_message = messages[-1]
-    if not last_message.tool_calls:
-        return END  # END is still used as a value, but not in the type annotation
+def should_execute(state: SQLAgentState) -> Literal["execute_sql", "__end__"]:
+    """Decide whether to execute the query or end."""
+    if state.get("validation_result", {}).get("valid", False):
+        return "execute_sql"
     else:
-        return "check_query"
+        return END
 
 
-builder = StateGraph(MessagesState)
-builder.add_node(list_tables)
-builder.add_node(call_get_schema)
-builder.add_node(get_schema_node, "get_schema")
-builder.add_node(generate_query)
-builder.add_node(check_query)
-builder.add_node(run_query_node, "run_query")
-
-builder.add_edge(START, "list_tables")
-builder.add_edge("list_tables", "call_get_schema")
-builder.add_edge("call_get_schema", "get_schema")
-builder.add_edge("get_schema", "generate_query")
-builder.add_conditional_edges(
-    "generate_query",
-    should_continue,
+# Build the graph
+graph = StateGraph(SQLAgentState)
+graph.add_node("generate_sql", generate_sql)
+graph.add_node("verify_sql", verify_sql)
+graph.add_node("execute_sql", execute_sql)
+graph.add_edge(START, "generate_sql")
+graph.add_edge("generate_sql", "verify_sql")
+graph.add_conditional_edges(
+    "verify_sql", should_execute, {"execute_sql": "execute_sql", "__end__": END}
 )
-builder.add_edge("check_query", "run_query")
-builder.add_edge("run_query", "generate_query")
+graph.add_edge("execute_sql", END)
 
-agent = builder.compile()
-
-# with open("agent_graph.png", "wb") as f:
-#     f.write(agent.get_graph().draw_mermaid_png())
+agent = graph.compile()
 
 
-question = "How many active products are "
-
-for step in agent.stream(
-    {"messages": [{"role": "user", "content": question}]},
-    stream_mode="values",
-):
-    step["messages"][-1].pretty_print()
+# Run a query through the SQL agent.
+initial_state = {
+    "user_query": "List all items ever posted",
+    "user_id": 1,
+    "generated_sql": "",
+    "target_database": "",
+    "validation_result": {},
+    "query_result": "",
+    "error": "",
+}
+result = agent.invoke(initial_state)
+print(result.get("query_result", "No results"))
