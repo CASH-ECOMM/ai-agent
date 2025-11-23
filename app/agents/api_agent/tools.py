@@ -5,7 +5,7 @@ import requests
 # --- API Tools generated from OpenAPI spec (excluding forbidden endpoints) ---
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8080")
-BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6ImFnZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NjM4NzczMzksImV4cCI6MTc2Mzg4MDkzOSwianRpIjoiZjhmMTY5MjQtMjdjZi00OGIxLTkyNTItYmU1YjYxYjhhMDIxIn0.GNgR9zYIPgcbKgkzR0QqEqJFx88ms4SKtV0BEEIMF9I"
+BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6ImFnZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NjM5MzA5MjQsImV4cCI6MTc2MzkzNDUyNCwianRpIjoiNDY2ZTU0NGEtNDZiMS00MTY5LTkyZmQtNmRiY2I5YmEyN2RjIn0.gRdJmxbu5-sM1ui2HYR1cBvEUnaE6fhUyGNVY-Ny1I4"
 HEADERS = {"Authorization": f"Bearer {BEARER_TOKEN}"}
 
 

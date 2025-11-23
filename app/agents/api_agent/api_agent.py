@@ -11,7 +11,7 @@ from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeSt
 
 load_dotenv()
 
-model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-4.1-mini-2025-04-14"))
+model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-4.1-nano-2025-04-14"))
 
 tools_by_name = {tool.name: tool for tool in tools}
 llm_with_tools = model.bind_tools(tools)
@@ -20,17 +20,20 @@ llm_with_tools = model.bind_tools(tools)
 def llm_call(state: MessagesState):
     """LLM decides whether to call a tool or not"""
 
+    system_prompt = """
+      "You are an AI assistant for an auction e-commerce system. 
+      Your goal is to help users interact with the system by answering questions, performing searches and other actions related to the user's needs. 
+      Only reference the tools available to you.
+      Whenever you need to perform an action that will create a change in the system (e.g. post an item to the catalogue) make sure too ask the user for confirmation first, providing of the summary of the action.
+      Under no circumstances should you make up information or provide false details. 
+      Always use the tools available to you to fetch real data from the system. 
+      You must never use or disclose other user's information or data."
+      """
+
     return {
         "messages": [
             llm_with_tools.invoke(
-                [
-                    SystemMessage(
-                        content=(
-                            "You are an AI assistant for an auction e-commerce system. Your goal is to help users interact with the system by answering questions, performing searches and other actions related to the user's needs. Only reference the tools available to you. Under no circumstances should you make up information or provide false details. Always use the tools available to you to fetch real data from the system. You must never use or disclose other user's information or data."
-                        )
-                    )
-                ]
-                + state["messages"]
+                [SystemMessage(content=(system_prompt))] + state["messages"]
             )
         ]
     }
@@ -63,32 +66,26 @@ def should_continue(state: MessagesState) -> Literal["tool_node", END]:
 
 
 # Build workflow
-agent_builder = StateGraph(MessagesState)
-
-# Add nodes
-agent_builder.add_node("llm_call", llm_call)
-agent_builder.add_node("tool_node", tool_node)
-
-# Add edges to connect nodes
-agent_builder.add_edge(START, "llm_call")
-agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
-agent_builder.add_edge("tool_node", "llm_call")
-
-# Compile the agent
-agent = agent_builder.compile()
+graph = StateGraph(MessagesState)
+graph.add_node("llm_call", llm_call)
+graph.add_node("tool_node", tool_node)
+graph.add_edge(START, "llm_call")
+graph.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
+graph.add_edge("tool_node", "llm_call")
+agent = graph.compile()
 
 # Show the agent
 # with open("api_agent_graph.png", "wb") as f:
 #     f.write(agent.get_graph().draw_mermaid_png())
 
-# Invoke
-messages = []
-while True:
-    user_input = input("You: ")
-    if user_input.strip().lower() == "/exit":
-        break
-    messages.append(HumanMessage(content=user_input))
-    result = agent.invoke({"messages": messages})
-    messages = result["messages"]
-    for m in messages[-1:]:
-        m.pretty_print()
+# Test the agent in a loop
+# messages = []
+# while True:
+#     user_input = input("You: ")
+#     if user_input.strip().lower() == "/exit":
+#         break
+#     messages.append(HumanMessage(content=user_input))
+#     result = agent.invoke({"messages": messages})
+#     messages = result["messages"]
+#     for m in messages[-1:]:
+#         m.pretty_print()
