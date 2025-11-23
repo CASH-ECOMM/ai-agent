@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+langgraph
+langchain>=0.1.16
+langchain_community>=0.0.29
+langchain_openai>=0.0.8
+psycopg2-binary
+python-dotenv

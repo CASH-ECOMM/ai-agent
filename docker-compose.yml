@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  user-service:
+    build: .
+    container_name: user-service
+    ports:
+      - "50051:50051"
+    env_file:
+      - .env
+    depends_on:
+      - user-db
+    networks:
+      - user-service-network
+
+  user-db:
+    image: postgres:15-alpine
+    container_name: user-service-db
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - user-service-network
+
+networks:
+  user-service-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
