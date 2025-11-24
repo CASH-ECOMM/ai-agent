@@ -7,6 +7,8 @@ from langgraph.graph import END, START, StateGraph
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from app.agents.sql_agent.agent_db_helper import get_db_connection
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.base import create_sql_agent
 
 load_dotenv()
 
@@ -188,7 +190,7 @@ def verify_sql(state: SQLAgentState) -> SQLAgentState:
 
 
 def execute_sql(state: SQLAgentState) -> SQLAgentState:
-    """Execute the validated SQL query."""
+    """Execute the validated SQL query using LangChain SQL agent."""
 
     validation = state["validation_result"]
     if not validation["valid"]:
@@ -196,48 +198,59 @@ def execute_sql(state: SQLAgentState) -> SQLAgentState:
         state["query_result"] = ""
         return state
 
-    sql_to_execute = validation["corrected_sql"]
+    user_query = state["user_query"]
     target_db = state.get("target_database")
 
     logger.info(f"EXECUTING QUERY ON: {target_db}")
 
-    conn = get_db_connection(target_db)
-    if not conn:
-        state["error"] = f"Failed to connect to database: {target_db}"
-        state["query_result"] = ""
-        return state
+    # Build database connection URI
+    db_host = os.getenv("POSTGRES_HOST", "localhost")
+    db_port = os.getenv("POSTGRES_PORT", "5555")
+    db_user = os.getenv("POSTGRES_USER", "dev")
+    db_password = os.getenv("POSTGRES_PASSWORD", "dev")
+
+    db_uri = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{target_db}"
 
     try:
-        with conn.cursor() as cursor:
-            cursor.execute(sql_to_execute)
-            results = cursor.fetchall()
-            column_names = [desc[0] for desc in cursor.description]
+        # 1. Connect to the database using SQLDatabase
+        db = SQLDatabase.from_uri(db_uri)
 
-        row_count = len(results)
+        # 2. Create the SQL agent with built-in tools
+        agent_executor = create_sql_agent(
+            llm=model,
+            db=db,
+            agent_type="openai-tools",
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=10,
+        )
 
-        # Format as CSV
-        result_text = f"Found {row_count} row(s)\n\n"
-        result_text += ",".join(column_names) + "\n"
+        # 3. Create a comprehensive prompt for the agent
+        prompt = f"""
+            You are an agent designed to interact with a SQL database.
+            Given an input question, create a syntactically correct PostgreSQL query to run,
+            then look at the results of the query and return the answer.
 
-        for row in results[:100]:
-            result_text += (
-                ",".join(str(val) if val is not None else "" for val in row) + "\n"
-            )
+            You MUST double check your query before executing it. If you get an error while
+            executing a query, rewrite the query and try again.
 
-        if row_count > 30:
-            result_text += f"\n... {row_count - 30} more rows not shown"
+            DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
-        state["query_result"] = result_text
+            Question: {user_query}
+            """
+
+        # 4. Execute the agent with the user query
+        result = agent_executor.invoke({"input": prompt})
+
+        state["query_result"] = result.get("output", "No results returned")
         state["error"] = ""
-        logger.info(f"Query returned {row_count} rows")
+        logger.info(f"Agent execution completed successfully")
 
     except Exception as e:
         error_msg = f"Query execution error: {str(e)}"
         state["error"] = error_msg
         state["query_result"] = ""
         logger.error(error_msg)
-    finally:
-        conn.close()
 
     return state
 
@@ -265,15 +278,15 @@ graph.add_edge("execute_sql", END)
 agent = graph.compile()
 
 
-# Run a query through the SQL agent.
-initial_state = {
-    "user_query": "List all items ever posted",
-    "user_id": 1,
-    "generated_sql": "",
-    "target_database": "",
-    "validation_result": {},
-    "query_result": "",
-    "error": "",
-}
-result = agent.invoke(initial_state)
-print(result.get("query_result", "No results"))
+# # Run a query through the SQL agent.
+# initial_state = {
+#     "user_query": "List all items ever posted",
+#     "user_id": 1,
+#     "generated_sql": "",
+#     "target_database": "",
+#     "validation_result": {},
+#     "query_result": "",
+#     "error": "",
+# }
+# result = agent.invoke(initial_state)
+# print(result.get("query_result", "No results"))

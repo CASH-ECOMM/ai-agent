@@ -5,7 +5,7 @@ import requests
 # --- API Tools generated from OpenAPI spec (excluding forbidden endpoints) ---
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8080")
-BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6ImFnZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NjM5MzA5MjQsImV4cCI6MTc2MzkzNDUyNCwianRpIjoiNDY2ZTU0NGEtNDZiMS00MTY5LTkyZmQtNmRiY2I5YmEyN2RjIn0.gRdJmxbu5-sM1ui2HYR1cBvEUnaE6fhUyGNVY-Ny1I4"
+BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6ImFnZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NjM5NTkxMTUsImV4cCI6MTc2Mzk2MjcxNSwianRpIjoiYzVmZmYyMmQtOWViYS00M2Y2LTljYjktMzZmZTUyYTJhMmMzIn0.jf2yyJ5cr_F9MgVVRyZ_7n9mxXV7--BSq0KL1kSiiLw"
 HEADERS = {"Authorization": f"Bearer {BEARER_TOKEN}"}
 
 
@@ -33,7 +33,8 @@ def create_catalogue_item(
         startingPrice: Starting price for the auction
         durationHours: Duration of the auction in hours
     Returns:
-        The created item as a dictionary.
+        The created item as a dictionary with an 'id' field. 
+        IMPORTANT: Use the 'id' from this response to start the auction by calling start_auction(catalogue_id=id).
     """
     data = {
         "title": title,

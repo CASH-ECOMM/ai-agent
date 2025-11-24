@@ -19,7 +19,7 @@ PG_PASSWORD = os.getenv("PG_PASSWORD", "dev")
 PG_URL = os.getenv("PG_URL", "")
 
 
-def get_db_connection(database: str):
+def get_db_connection(database: str | None = None):
     """Create a direct database connection."""
     try:
         if PG_URL:
