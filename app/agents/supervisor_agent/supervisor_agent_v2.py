@@ -140,7 +140,7 @@ def should_fallback_to_sql(state: ConversationContext) -> Literal["sql_node", "_
     """Determine if we should route to SQL agent or end."""
     if state.get("needs_sql_fallback", False):
         return "sql_node"
-    return END
+    return "__end__"
 
 
 # --- 5. Build the Sequential Agent Graph ---
