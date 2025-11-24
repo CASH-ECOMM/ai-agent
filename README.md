@@ -20,12 +20,26 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Run the API agent**
+**Run the API agent:**
 ```bash
-cd /Users/david_zinkiv/eecs4413/ai-agent
 python -m app.agents.api_agent.api_agent
 ```
 
+**Run the SQL agent:**
+```bash
+python -m app.agents.sql_agent.sql_agent
+```
+
+**Run the Supervisor Agent V2 (Sequential Flow):**
+```bash
+python -m app.agents.supervisor_agent.supervisor_agent_v2
+```
+
+The Supervisor Agent V2 implements a sequential flow where:
+- API agent is tried first for all requests
+- SQL agent is used as fallback when API agent cannot fulfill the request
+
+See [docs/SUPERVISOR_AGENT_V2.md](docs/SUPERVISOR_AGENT_V2.md) for details.
 
 # ----- **UNDER CONSTRUCTION** -----
 
@@ -46,5 +60,23 @@ This starts AI agent service in a Docker.
 
 ## Features
 
+### Multi-Agent System
+- **API Agent**: Handles direct API operations (create items, place bids, get auction info)
+- **SQL Agent**: Executes complex database queries for analytics and reporting
+- **Supervisor Agent V2**: Sequential flow coordinator (API first, SQL as fallback)
+
+### Key Capabilities
+- Create and manage auction items
+- Place and track bids
+- Query auction statistics and analytics
+- Natural language to SQL conversion
+- Automatic fallback for complex queries
+
+## Testing
+
+Run unit tests:
+```bash
+PYTHONPATH=/home/runner/work/ai-agent/ai-agent python tests/test_supervisor_v2_unit.py
+```
 
 ## Tech Stack
