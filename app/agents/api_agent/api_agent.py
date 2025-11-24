@@ -5,7 +5,6 @@ import os
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from typing import Literal
-from IPython.display import Image, display
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
