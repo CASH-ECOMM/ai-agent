@@ -39,6 +39,16 @@ The Supervisor Agent V2 implements a sequential flow where:
 - API agent is tried first for all requests
 - SQL agent is used as fallback when API agent cannot fulfill the request
 
+### 3. Running with FastAPI
+
+**Start the service:**
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Service will start on `http://localhost:8000`
+API docs available at `http://localhost:8000/docs`
+
 See [docs/SUPERVISOR_AGENT_V2.md](docs/SUPERVISOR_AGENT_V2.md) for details.
 
 # ----- **UNDER CONSTRUCTION** -----

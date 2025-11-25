@@ -1,12 +1,20 @@
 import os
 from langchain.tools import tool
 import requests
+from contextvars import ContextVar
 
 # --- API Tools generated from OpenAPI spec (excluding forbidden endpoints) ---
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8080")
-BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6ImFnZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NjM5NTkxMTUsImV4cCI6MTc2Mzk2MjcxNSwianRpIjoiYzVmZmYyMmQtOWViYS00M2Y2LTljYjktMzZmZTUyYTJhMmMzIn0.jf2yyJ5cr_F9MgVVRyZ_7n9mxXV7--BSq0KL1kSiiLw"
-HEADERS = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+
+# Context variable to store JWT token per request
+jwt_token_context: ContextVar[str] = ContextVar("jwt_token", default="")
+
+
+def get_headers():
+    """Get headers with JWT token from context."""
+    token = jwt_token_context.get()
+    return {"Authorization": f"Bearer {token}"}
 
 
 @tool
@@ -16,7 +24,7 @@ def get_all_catalogue_items() -> dict:
     Returns:
         All catalogue items as a dictionary.
     """
-    resp = requests.get(f"{API_BASE}/api/catalogue/items", headers=HEADERS)
+    resp = requests.get(f"{API_BASE}/api/catalogue/items", headers=get_headers())
     resp.raise_for_status()
     return resp.json()
 
@@ -33,7 +41,7 @@ def create_catalogue_item(
         startingPrice: Starting price for the auction
         durationHours: Duration of the auction in hours
     Returns:
-        The created item as a dictionary with an 'id' field. 
+        The created item as a dictionary with an 'id' field.
         IMPORTANT: Use the 'id' from this response to start the auction by calling start_auction(catalogue_id=id).
     """
     data = {
@@ -42,7 +50,9 @@ def create_catalogue_item(
         "startingPrice": startingPrice,
         "durationHours": durationHours,
     }
-    resp = requests.post(f"{API_BASE}/api/catalogue/items", json=data, headers=HEADERS)
+    resp = requests.post(
+        f"{API_BASE}/api/catalogue/items", json=data, headers=get_headers()
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -58,7 +68,7 @@ def search_catalogue_items(keyword: str) -> dict:
     """
     params = {"keyword": keyword}
     resp = requests.get(
-        f"{API_BASE}/api/catalogue/search", params=params, headers=HEADERS
+        f"{API_BASE}/api/catalogue/search", params=params, headers=get_headers()
     )
     resp.raise_for_status()
     return resp.json()
@@ -73,7 +83,9 @@ def get_catalogue_item_by_id(item_id: int) -> dict:
     Returns:
         The catalogue item as a dictionary.
     """
-    resp = requests.get(f"{API_BASE}/api/catalogue/items/{item_id}", headers=HEADERS)
+    resp = requests.get(
+        f"{API_BASE}/api/catalogue/items/{item_id}", headers=get_headers()
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -88,7 +100,7 @@ def start_auction(catalogue_id: int) -> dict:
         Auction start response as a dictionary.
     """
     resp = requests.post(
-        f"{API_BASE}/api/auctions/{catalogue_id}/start", headers=HEADERS
+        f"{API_BASE}/api/auctions/{catalogue_id}/start", headers=get_headers()
     )
     resp.raise_for_status()
     return resp.json()
@@ -106,7 +118,7 @@ def place_bid(catalogue_id: int, bidAmount: int) -> dict:
     """
     data = {"bidAmount": bidAmount}
     resp = requests.post(
-        f"{API_BASE}/api/auctions/{catalogue_id}/bid", json=data, headers=HEADERS
+        f"{API_BASE}/api/auctions/{catalogue_id}/bid", json=data, headers=get_headers()
     )
     resp.raise_for_status()
     return resp.json()
@@ -122,7 +134,7 @@ def get_auction_winner(catalogue_id: int) -> dict:
         Winner information as a dictionary.
     """
     resp = requests.get(
-        f"{API_BASE}/api/auctions/{catalogue_id}/winner", headers=HEADERS
+        f"{API_BASE}/api/auctions/{catalogue_id}/winner", headers=get_headers()
     )
     resp.raise_for_status()
     return resp.json()
@@ -138,7 +150,7 @@ def get_auction_status(catalogue_id: int) -> dict:
         Auction status as a dictionary.
     """
     resp = requests.get(
-        f"{API_BASE}/api/auctions/{catalogue_id}/status", headers=HEADERS
+        f"{API_BASE}/api/auctions/{catalogue_id}/status", headers=get_headers()
     )
     resp.raise_for_status()
     return resp.json()
@@ -153,7 +165,9 @@ def get_auction_end_time(catalogue_id: int) -> dict:
     Returns:
         Auction end time as a dictionary.
     """
-    resp = requests.get(f"{API_BASE}/api/auctions/{catalogue_id}/end", headers=HEADERS)
+    resp = requests.get(
+        f"{API_BASE}/api/auctions/{catalogue_id}/end", headers=get_headers()
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -167,7 +181,7 @@ def get_payment_receipt(payment_id: str) -> dict:
     Returns:
         Payment receipt as a dictionary.
     """
-    resp = requests.get(f"{API_BASE}/api/payments/{payment_id}", headers=HEADERS)
+    resp = requests.get(f"{API_BASE}/api/payments/{payment_id}", headers=get_headers())
     resp.raise_for_status()
     return resp.json()
 
@@ -179,7 +193,7 @@ def get_my_payment_history() -> dict:
     Returns:
         Payment history as a dictionary.
     """
-    resp = requests.get(f"{API_BASE}/api/payments/history", headers=HEADERS)
+    resp = requests.get(f"{API_BASE}/api/payments/history", headers=get_headers())
     resp.raise_for_status()
     return resp.json()
 
