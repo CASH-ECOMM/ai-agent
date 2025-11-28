@@ -1,23 +1,84 @@
 import os
 from langchain.tools import tool
+from langchain_openai import ChatOpenAI
 import requests
 from contextvars import ContextVar
+import functools
+import requests
+from dotenv import load_dotenv
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 
-# --- API Tools generated from OpenAPI spec (excluding forbidden endpoints) ---
+load_dotenv()
+
+# --- Database Setup ---
+db_host = os.getenv("POSTGRES_HOST", "localhost")
+db_port = os.getenv("POSTGRES_PORT", "5555")
+db_user = os.getenv("POSTGRES_USER", "dev")
+db_password = os.getenv("POSTGRES_PASSWORD", "dev")
+
+catalogue_db = SQLDatabase.from_uri(
+    f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/catalogue_db"
+)
+auction_db = SQLDatabase.from_uri(
+    f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/auction_db"
+)
+
+model = ChatOpenAI(model=os.getenv("LLM_MODEL_", "gpt-5-nano-2025-08-07"))
+
+cat_toolkit = SQLDatabaseToolkit(db=catalogue_db, llm=model)
+auc_toolkit = SQLDatabaseToolkit(db=auction_db, llm=model)
+
+catalogue_tools = cat_toolkit.get_tools()
+for sql_tool in catalogue_tools:  # Renamed to avoid shadowing @tool
+    sql_tool.name = f"catalogue_{sql_tool.name}"
+    sql_tool.description = (
+        f"Use this to query the CATALOGUE database. {sql_tool.description}"
+    )
+
+auction_tools = auc_toolkit.get_tools()
+for sql_tool in auction_tools:  # Renamed to avoid shadowing @tool
+    sql_tool.name = f"auction_{sql_tool.name}"
+    sql_tool.description = (
+        f"Use this to query the AUCTION database. {sql_tool.description}"
+    )
+
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8080")
 
-# Context variable to store JWT token per request
 jwt_token_context: ContextVar[str] = ContextVar("jwt_token", default="")
 
 
 def get_headers():
     """Get headers with JWT token from context."""
     token = jwt_token_context.get()
+    print("Using JWT token in headers: ", token)
     return {"Authorization": f"Bearer {token}"}
 
 
+def handle_api_errors(func):
+    """Decorator to catch API errors and return the ACTUAL backend error message."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code
+            try:
+                error_body = e.response.json()
+                server_msg = error_body.get("message", e.response.text)
+            except ValueError:
+                server_msg = e.response.text or "No error details provided."
+            return f"API_ERROR: {status_code} - {server_msg}"
+        except Exception as e:
+            return f"SYSTEM_ERROR: Internal tool execution failed. {str(e)}"
+
+    return wrapper
+
+
 @tool
+@handle_api_errors
 def get_all_catalogue_items() -> dict:
     """Fetch all items in the catalogue.
 
@@ -30,6 +91,7 @@ def get_all_catalogue_items() -> dict:
 
 
 @tool
+@handle_api_errors
 def create_catalogue_item(
     title: str, description: str, startingPrice: int, durationHours: int
 ) -> dict:
@@ -58,6 +120,7 @@ def create_catalogue_item(
 
 
 @tool
+@handle_api_errors
 def search_catalogue_items(keyword: str) -> dict:
     """Search catalogue items by keyword in title.
 
@@ -75,6 +138,7 @@ def search_catalogue_items(keyword: str) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_catalogue_item_by_id(item_id: int) -> dict:
     """Fetch a single catalogue item by ID.
 
@@ -91,6 +155,7 @@ def get_catalogue_item_by_id(item_id: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def start_auction(catalogue_id: int) -> dict:
     """Start an auction for a catalogue item.
 
@@ -107,6 +172,7 @@ def start_auction(catalogue_id: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def place_bid(catalogue_id: int, bidAmount: int) -> dict:
     """Place a bid on an auction for a catalogue item.
 
@@ -125,6 +191,7 @@ def place_bid(catalogue_id: int, bidAmount: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_auction_winner(catalogue_id: int) -> dict:
     """Get the winner of a completed auction.
 
@@ -141,6 +208,7 @@ def get_auction_winner(catalogue_id: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_auction_status(catalogue_id: int) -> dict:
     """Get the status of an auction for a catalogue item.
 
@@ -157,6 +225,7 @@ def get_auction_status(catalogue_id: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_auction_end_time(catalogue_id: int) -> dict:
     """Get the end time of an auction for a catalogue item.
 
@@ -173,6 +242,7 @@ def get_auction_end_time(catalogue_id: int) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_payment_receipt(payment_id: str) -> dict:
     """Retrieve payment details and receipt information by payment ID.
 
@@ -187,28 +257,34 @@ def get_payment_receipt(payment_id: str) -> dict:
 
 
 @tool
+@handle_api_errors
 def get_my_payment_history() -> dict:
     """Returns payment history for the authenticated user.
 
     Returns:
         Payment history as a dictionary.
     """
+    print("headers: ", get_headers())
     resp = requests.get(f"{API_BASE}/api/payments/history", headers=get_headers())
     resp.raise_for_status()
     return resp.json()
 
 
 # Augment the LLM with tools
-tools = [
-    get_all_catalogue_items,
-    create_catalogue_item,
-    search_catalogue_items,
-    get_catalogue_item_by_id,
-    start_auction,
-    place_bid,
-    get_auction_winner,
-    get_auction_status,
-    get_auction_end_time,
-    get_payment_receipt,
-    get_my_payment_history,
-]
+tools = (
+    catalogue_tools
+    + auction_tools
+    + [
+        get_all_catalogue_items,
+        create_catalogue_item,
+        search_catalogue_items,
+        get_catalogue_item_by_id,
+        start_auction,
+        place_bid,
+        get_auction_winner,
+        get_auction_status,
+        get_auction_end_time,
+        get_payment_receipt,
+        get_my_payment_history,
+    ]
+)

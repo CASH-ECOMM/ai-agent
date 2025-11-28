@@ -1,17 +1,8 @@
-================================================================================
-DATABASE SCHEMAS COLLECTION
-Generated: 2025-11-23 16:35:04
-================================================================================
-
-
-================================================================================
 DATABASE: catalogue_db
 ================================================================================
 
---------------------------------------------------------------------------------
 TABLE: items
 --------------------------------------------------------------------------------
-
 COLUMNS:
   - id: integer NOT NULL DEFAULT nextval('items_id_seq'::regclass)
   - title: character varying NULL
@@ -27,29 +18,15 @@ COLUMNS:
   - shipping_time: integer NOT NULL
 
 CONSTRAINTS:
-  - CHECK: None (constraint: 2200_16419_11_not_null)
-  - CHECK: None (constraint: 2200_16419_12_not_null)
-  - CHECK: None (constraint: 2200_16419_1_not_null)
   - PRIMARY KEY: id (constraint: items_pkey)
 
-INDEXES:
-  - items_pkey
-    CREATE UNIQUE INDEX items_pkey ON public.items USING btree (id)
-  - ix_items_id
-    CREATE INDEX ix_items_id ON public.items USING btree (id)
-  - ix_items_title
-    CREATE INDEX ix_items_title ON public.items USING btree (title)
 
 
-
-================================================================================
 DATABASE: auction_db
 ================================================================================
 
---------------------------------------------------------------------------------
 TABLE: auctions
 --------------------------------------------------------------------------------
-
 COLUMNS:
   - id: integer NOT NULL DEFAULT nextval('auctions_id_seq'::regclass)
   - start_time: timestamp without time zone NOT NULL
@@ -59,23 +36,12 @@ COLUMNS:
   - highest_bid: integer NULL
 
 CONSTRAINTS:
-  - CHECK: None (constraint: 2200_16430_1_not_null)
-  - CHECK: None (constraint: 2200_16430_2_not_null)
-  - CHECK: None (constraint: 2200_16430_3_not_null)
-  - CHECK: None (constraint: 2200_16430_4_not_null)
-  - CHECK: None (constraint: 2200_16430_5_not_null)
   - FOREIGN KEY: highest_bid -> bids(id) (constraint: fk_auction_bid)
   - PRIMARY KEY: id (constraint: auctions_pkey)
 
-INDEXES:
-  - auctions_pkey
-    CREATE UNIQUE INDEX auctions_pkey ON public.auctions USING btree (id)
 
-
---------------------------------------------------------------------------------
 TABLE: bids
 --------------------------------------------------------------------------------
-
 COLUMNS:
   - id: integer NOT NULL DEFAULT nextval('bids_id_seq'::regclass)
   - user_id: integer NOT NULL
@@ -85,30 +51,16 @@ COLUMNS:
   - auction_id: integer NOT NULL
 
 CONSTRAINTS:
-  - CHECK: None (constraint: 2200_16439_1_not_null)
-  - CHECK: None (constraint: 2200_16439_2_not_null)
-  - CHECK: None (constraint: 2200_16439_3_not_null)
-  - CHECK: None (constraint: 2200_16439_4_not_null)
-  - CHECK: None (constraint: 2200_16439_6_not_null)
   - FOREIGN KEY: auction_id -> auctions(id) (constraint: fk_bid_auction)
   - PRIMARY KEY: id (constraint: bids_pkey)
 
-INDEXES:
-  - bids_pkey
-    CREATE UNIQUE INDEX bids_pkey ON public.bids USING btree (id)
-  - ix_bids_id
-    CREATE INDEX ix_bids_id ON public.bids USING btree (id)
 
 
-
-================================================================================
 DATABASE: payment_db
 ================================================================================
 
---------------------------------------------------------------------------------
 TABLE: payments
 --------------------------------------------------------------------------------
-
 COLUMNS:
   - id: character varying(255) NOT NULL
   - country: character varying(255) NOT NULL
@@ -139,41 +91,12 @@ COLUMNS:
   - user_id: integer NOT NULL
 
 CONSTRAINTS:
-  - CHECK: None (constraint: 2200_16458_13_not_null)
-  - CHECK: None (constraint: 2200_16458_15_not_null)
-  - CHECK: None (constraint: 2200_16458_16_not_null)
-  - CHECK: None (constraint: 2200_16458_17_not_null)
-  - CHECK: None (constraint: 2200_16458_19_not_null)
-  - CHECK: None (constraint: 2200_16458_1_not_null)
-  - CHECK: None (constraint: 2200_16458_20_not_null)
-  - CHECK: None (constraint: 2200_16458_21_not_null)
-  - CHECK: None (constraint: 2200_16458_22_not_null)
-  - CHECK: None (constraint: 2200_16458_24_not_null)
-  - CHECK: None (constraint: 2200_16458_27_not_null)
-  - CHECK: None (constraint: 2200_16458_2_not_null)
-  - CHECK: None (constraint: 2200_16458_3_not_null)
-  - CHECK: None (constraint: 2200_16458_4_not_null)
-  - CHECK: None (constraint: 2200_16458_5_not_null)
-  - CHECK: None (constraint: 2200_16458_6_not_null)
-  - CHECK: None (constraint: 2200_16458_7_not_null)
-  - CHECK: None (constraint: 2200_16458_8_not_null)
-  - CHECK: None (constraint: payments_payment_status_check)
-  - CHECK: None (constraint: payments_shipping_type_check)
-  - CHECK: None (constraint: payments_status_check)
   - PRIMARY KEY: id (constraint: payments_pkey)
   - UNIQUE: payment_id (constraint: uk_t4ffsaqe8d6i83gs100u2y3l1)
 
-INDEXES:
-  - payments_pkey
-    CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)
-  - uk_t4ffsaqe8d6i83gs100u2y3l1
-    CREATE UNIQUE INDEX uk_t4ffsaqe8d6i83gs100u2y3l1 ON public.payments USING btree (payment_id)
 
-
---------------------------------------------------------------------------------
 TABLE: receipts
 --------------------------------------------------------------------------------
-
 COLUMNS:
   - receipt_id: integer NOT NULL DEFAULT nextval('receipts_receipt_id_seq'::regclass)
   - customer_address: character varying(500) NOT NULL
@@ -190,27 +113,7 @@ COLUMNS:
   - payment_id: integer NOT NULL
 
 CONSTRAINTS:
-  - CHECK: None (constraint: 2200_16469_10_not_null)
-  - CHECK: None (constraint: 2200_16469_12_not_null)
-  - CHECK: None (constraint: 2200_16469_13_not_null)
-  - CHECK: None (constraint: 2200_16469_1_not_null)
-  - CHECK: None (constraint: 2200_16469_2_not_null)
-  - CHECK: None (constraint: 2200_16469_3_not_null)
-  - CHECK: None (constraint: 2200_16469_4_not_null)
-  - CHECK: None (constraint: 2200_16469_5_not_null)
-  - CHECK: None (constraint: 2200_16469_6_not_null)
-  - CHECK: None (constraint: 2200_16469_9_not_null)
   - FOREIGN KEY: payment_id -> payments(payment_id) (constraint: fkecr3sh9ed2cda7v8n3gyy7530)
   - PRIMARY KEY: receipt_id (constraint: receipts_pkey)
   - UNIQUE: payment_id (constraint: uk_s30efaw8xbp2u5rsvod3csf16)
   - UNIQUE: receipt_number (constraint: uk_sehtr7fmqdjw4f4n3xys7x19l)
-
-INDEXES:
-  - receipts_pkey
-    CREATE UNIQUE INDEX receipts_pkey ON public.receipts USING btree (receipt_id)
-  - uk_s30efaw8xbp2u5rsvod3csf16
-    CREATE UNIQUE INDEX uk_s30efaw8xbp2u5rsvod3csf16 ON public.receipts USING btree (payment_id)
-  - uk_sehtr7fmqdjw4f4n3xys7x19l
-    CREATE UNIQUE INDEX uk_sehtr7fmqdjw4f4n3xys7x19l ON public.receipts USING btree (receipt_number)
-
-

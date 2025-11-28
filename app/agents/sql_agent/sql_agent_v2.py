@@ -12,7 +12,7 @@ from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain.agents import create_agent
 
-from app.agents.api_agent.tools import tools as api_tools
+from app.tools import tools as api_tools
 
 
 load_dotenv()
