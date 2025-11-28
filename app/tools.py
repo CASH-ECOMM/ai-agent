@@ -16,15 +16,14 @@ db_host = os.getenv("POSTGRES_HOST", "localhost")
 db_port = os.getenv("POSTGRES_PORT", "5555")
 db_user = os.getenv("POSTGRES_USER", "dev")
 db_password = os.getenv("POSTGRES_PASSWORD", "dev")
-
-catalogue_db = SQLDatabase.from_uri(
-    f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/catalogue_db"
-)
-auction_db = SQLDatabase.from_uri(
-    f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/auction_db"
+db_url = os.getenv(
+    "POSTGRES_URL", "postgresql://{db_user}:{db_password}@{db_host}:{db_port}"
 )
 
-model = ChatOpenAI(model=os.getenv("LLM_MODEL_", "gpt-5-nano-2025-08-07"))
+catalogue_db = SQLDatabase.from_uri(f"{db_url}/catalogue_db")
+auction_db = SQLDatabase.from_uri(f"{db_url}/auction_db")
+
+model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-5-nano-2025-08-07"))
 
 cat_toolkit = SQLDatabaseToolkit(db=catalogue_db, llm=model)
 auc_toolkit = SQLDatabaseToolkit(db=auction_db, llm=model)
