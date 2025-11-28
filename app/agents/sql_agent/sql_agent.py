@@ -190,7 +190,7 @@ def verify_sql(state: SQLAgentState) -> SQLAgentState:
 
 
 def execute_sql(state: SQLAgentState) -> SQLAgentState:
-    """Execute the validated SQL query using LangChain SQL agent."""
+    """Execute queries using LangChain SQL agent with multi-database support."""
 
     validation = state["validation_result"]
     if not validation["valid"]:
@@ -199,50 +199,102 @@ def execute_sql(state: SQLAgentState) -> SQLAgentState:
         return state
 
     user_query = state["user_query"]
-    target_db = state.get("target_database")
 
-    logger.info(f"EXECUTING QUERY ON: {target_db}")
+    logger.info(f"EXECUTING MULTI-DATABASE QUERY")
 
-    # Build database connection URI
+    # Build database connection URIs
     db_host = os.getenv("POSTGRES_HOST", "localhost")
     db_port = os.getenv("POSTGRES_PORT", "5555")
     db_user = os.getenv("POSTGRES_USER", "dev")
     db_password = os.getenv("POSTGRES_PASSWORD", "dev")
 
-    db_uri = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{target_db}"
-
     try:
-        # 1. Connect to the database using SQLDatabase
-        db = SQLDatabase.from_uri(db_uri)
+        # Connect to all three databases
+        catalogue_db = SQLDatabase.from_uri(
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/catalogue_db"
+        )
+        auction_db = SQLDatabase.from_uri(
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/auction_db"
+        )
+        payment_db = SQLDatabase.from_uri(
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/payment_db"
+        )
 
-        # 2. Create the SQL agent with built-in tools
-        agent_executor = create_sql_agent(
+        # Create agents for each database
+        catalogue_agent = create_sql_agent(
             llm=model,
-            db=db,
+            db=catalogue_db,
             agent_type="openai-tools",
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=10,
+            max_iterations=5,
         )
 
-        # 3. Create a comprehensive prompt for the agent
-        prompt = f"""
-            You are an agent designed to interact with a SQL database.
-            Given an input question, create a syntactically correct PostgreSQL query to run,
-            then look at the results of the query and return the answer.
+        payment_agent = create_sql_agent(
+            llm=model,
+            db=payment_db,
+            agent_type="openai-tools",
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=5,
+        )
 
-            You MUST double check your query before executing it. If you get an error while
-            executing a query, rewrite the query and try again.
+        # Start with the primary database based on initial determination
+        target_db = state.get("target_database", "catalogue_db")
 
-            DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
+        logger.info(f"Starting with primary database: {target_db}")
 
-            Question: {user_query}
-            """
+        # Step 1: Query the primary database
+        if target_db == "payment_db":
+            primary_prompt = f"""
+Query the payment database to answer: {user_query}
 
-        # 4. Execute the agent with the user query
-        result = agent_executor.invoke({"input": prompt})
+Return the item_id values and any relevant metrics (counts, amounts, etc.).
+Be specific with the numbers. For example: "item_id: 7 has 1 sale, item_id: 8 has 1 sale"
+"""
+            result = payment_agent.invoke({"input": primary_prompt})
+            initial_output = result.get("output", "")
+            logger.info(f"Primary query result: {initial_output}")
 
-        state["query_result"] = result.get("output", "No results returned")
+            # Step 2: Extract item IDs and query catalogue
+            if "item_id" in initial_output.lower():
+                logger.info("Detected item_ids, querying catalogue for details...")
+
+                enrichment_prompt = f"""
+The payment database query returned: {initial_output}
+
+Now query the catalogue database (items table) to get the title and description 
+for each item_id mentioned above. 
+
+Then provide a COMPLETE answer that combines:
+1. The sales data from payments
+2. The item details (title, description) from catalogue
+
+Format the final answer clearly for the user's question: {user_query}
+"""
+                enriched_result = catalogue_agent.invoke({"input": enrichment_prompt})
+                final_output = enriched_result.get("output", initial_output)
+            else:
+                final_output = initial_output
+
+        else:
+            # For catalogue or auction queries, use the appropriate agent directly
+            if target_db == "catalogue_db":
+                primary_agent = catalogue_agent
+            else:
+                primary_agent = create_sql_agent(
+                    llm=model,
+                    db=auction_db,
+                    agent_type="openai-tools",
+                    verbose=True,
+                    handle_parsing_errors=True,
+                    max_iterations=5,
+                )
+
+            result = primary_agent.invoke({"input": user_query})
+            final_output = result.get("output", "")
+
+        state["query_result"] = final_output
         state["error"] = ""
         logger.info(f"Agent execution completed successfully")
 

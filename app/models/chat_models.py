@@ -6,6 +6,7 @@ class UserChatRequest(BaseModel):
     email: str
     username: str
     first_name: str
+    jwt_token: str
 
 
 class ChatMessage(BaseModel):
