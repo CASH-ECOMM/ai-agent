@@ -9,7 +9,7 @@ from app.tools import tools
 
 load_dotenv()
 
-model = ChatOpenAI(model=os.getenv("LLM_MODEL_", "gpt-5-nano-2025-08-07"))
+model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-5-nano-2025-08-07"))
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
