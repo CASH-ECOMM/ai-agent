@@ -12,7 +12,7 @@ from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain.agents import create_agent
 
-from app.agents.api_agent.tools import tools as api_tools
+from app.tools import tools as api_tools
 
 
 load_dotenv()
@@ -54,6 +54,9 @@ of the CASH system's data, economics, and capabilities.
 Whenever the answer might benefit from, depend on, or be
 improved by actual system information, you use tools.
 ============================================================
+
+### Important!!!
+- Be short and concise! Brevity is one of the top priorities.
 
 ### Domain Perspective
 You do NOT answer as a general-purpose AI.

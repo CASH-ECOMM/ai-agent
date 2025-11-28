@@ -58,7 +58,7 @@ class APIAgentDecision(BaseModel):
 
 def run_api_agent(state: ConversationContext):
     """Run the API agent first to attempt fulfilling the request."""
-    from app.agents.api_agent.tools import jwt_token_context
+    from app.tools import jwt_token_context
 
     # Extract the last user message
     user_input = state["messages"][-1].content if state["messages"] else ""
