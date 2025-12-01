@@ -1,0 +1,134 @@
+
+================================================================================
+DATABASE: catalogue_db
+================================================================================
+
+--------------------------------------------------------------------------------
+TABLE: items
+--------------------------------------------------------------------------------
+
+COLUMNS:
+  - id: integer NOT NULL DEFAULT nextval('items_id_seq'::regclass)
+  - title: character varying NULL
+  - description: character varying NULL
+  - starting_price: integer NULL
+  - current_price: integer NULL
+  - duration_hours: integer NULL
+  - created_at: timestamp without time zone NULL
+  - end_time: timestamp without time zone NULL
+  - active: boolean NULL
+  - seller_id: integer NULL
+  - shipping_cost: integer NOT NULL
+  - shipping_time: integer NOT NULL
+
+CONSTRAINTS:
+  - PRIMARY KEY: id (constraint: items_pkey)
+
+
+
+================================================================================
+DATABASE: auction_db
+================================================================================
+
+--------------------------------------------------------------------------------
+TABLE: auctions
+--------------------------------------------------------------------------------
+
+COLUMNS:
+  - id: integer NOT NULL DEFAULT nextval('auctions_id_seq'::regclass)
+  - start_time: timestamp without time zone NOT NULL
+  - end_time: timestamp without time zone NOT NULL
+  - starting_amount: integer NOT NULL
+  - status: character varying NOT NULL
+  - highest_bid: integer NULL
+
+CONSTRAINTS:
+  - FOREIGN KEY: highest_bid -> bids(id) (constraint: fk_auction_bid)
+  - PRIMARY KEY: id (constraint: auctions_pkey)
+
+
+--------------------------------------------------------------------------------
+TABLE: bids
+--------------------------------------------------------------------------------
+
+COLUMNS:
+  - id: integer NOT NULL DEFAULT nextval('bids_id_seq'::regclass)
+  - user_id: integer NOT NULL
+  - username: character varying NOT NULL
+  - amount: integer NOT NULL
+  - created: timestamp without time zone NULL
+  - auction_id: integer NOT NULL
+
+CONSTRAINTS:
+  - FOREIGN KEY: auction_id -> auctions(id) (constraint: fk_bid_auction)
+  - PRIMARY KEY: id (constraint: bids_pkey)
+
+
+
+================================================================================
+DATABASE: payment_db
+================================================================================
+
+--------------------------------------------------------------------------------
+TABLE: payments
+--------------------------------------------------------------------------------
+
+COLUMNS:
+  - id: character varying(255) NOT NULL
+  - country: character varying(255) NOT NULL
+  - first_name: character varying(255) NOT NULL
+  - last_name: character varying(255) NOT NULL
+  - street_number: character varying(255) NOT NULL
+  - postal_code: character varying(255) NOT NULL
+  - province: character varying(255) NOT NULL
+  - street: character varying(255) NOT NULL
+  - created_at: timestamp without time zone NULL
+  - card_number_last_four: character varying(4) NULL
+  - card_type: character varying(255) NULL
+  - expiry_date: character varying(5) NULL
+  - name_on_card: character varying(255) NOT NULL
+  - estimated_shipping_days: integer NULL
+  - hst_amount: double precision NOT NULL
+  - item_cost: integer NOT NULL
+  - item_id: integer NOT NULL
+  - payment_error_message: character varying(255) NULL
+  - payment_id: integer NOT NULL
+  - payment_status: character varying(255) NOT NULL
+  - shipping_cost: integer NOT NULL
+  - shipping_type: character varying(255) NOT NULL
+  - status: character varying(255) NULL
+  - total_amount: double precision NOT NULL
+  - transaction_reference: character varying(255) NULL
+  - updated_at: timestamp without time zone NULL
+  - user_id: integer NOT NULL
+
+CONSTRAINTS:
+  - PRIMARY KEY: id (constraint: payments_pkey)
+  - UNIQUE: payment_id (constraint: uk_t4ffsaqe8d6i83gs100u2y3l1)
+
+
+--------------------------------------------------------------------------------
+TABLE: receipts
+--------------------------------------------------------------------------------
+
+COLUMNS:
+  - receipt_id: integer NOT NULL DEFAULT nextval('receipts_receipt_id_seq'::regclass)
+  - customer_address: character varying(500) NOT NULL
+  - customer_name: character varying(255) NOT NULL
+  - hst_amount: double precision NOT NULL
+  - item_cost: integer NOT NULL
+  - item_id: integer NOT NULL
+  - payment_method: character varying(255) NULL
+  - receipt_date: timestamp without time zone NULL
+  - receipt_number: character varying(255) NOT NULL
+  - shipping_cost: integer NOT NULL
+  - shipping_estimate_days: integer NULL
+  - total_paid: double precision NOT NULL
+  - payment_id: integer NOT NULL
+
+CONSTRAINTS:
+
+  - FOREIGN KEY: payment_id -> payments(payment_id) (constraint: fkecr3sh9ed2cda7v8n3gyy7530)
+  - PRIMARY KEY: receipt_id (constraint: receipts_pkey)
+  - UNIQUE: payment_id (constraint: uk_s30efaw8xbp2u5rsvod3csf16)
+  - UNIQUE: receipt_number (constraint: uk_sehtr7fmqdjw4f4n3xys7x19l)

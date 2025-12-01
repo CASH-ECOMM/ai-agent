@@ -51,7 +51,6 @@ jwt_token_context: ContextVar[str] = ContextVar("jwt_token", default="")
 def get_headers():
     """Get headers with JWT token from context."""
     token = jwt_token_context.get()
-    print("Using JWT token in headers: ", token)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -263,7 +262,6 @@ def get_my_payment_history() -> dict:
     Returns:
         Payment history as a dictionary.
     """
-    print("headers: ", get_headers())
     resp = requests.get(f"{API_BASE}/api/payments/history", headers=get_headers())
     resp.raise_for_status()
     return resp.json()
