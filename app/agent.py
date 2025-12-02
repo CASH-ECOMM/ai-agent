@@ -13,7 +13,7 @@ model = ChatOpenAI(
     model=os.getenv("LLM_MODEL", "gpt-4.1-mini-2025-04-14"), temperature=0.1
 )
 
-SYSTEM_PROMPT = get_system_prompt(version=1)
+SYSTEM_PROMPT = get_system_prompt(version=3)
 
 agent = create_agent(
     model,
