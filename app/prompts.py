@@ -136,7 +136,7 @@ def get_system_prompt(version: int) -> str:
 
     **[C] AUCTION SQL** (auction_sql_db_query)
     Use for: Auction status, prices, winners, bid history.
-    - Table `auctions`: id, status, end_time, highest_bid, starting_amount.
+    - Table `auctions`: id, status, end_time, highest_bid, starting_amount. (highest_bid is a foreign key to bids.id)
     - Table `bids`: id, amount, username, auction_id.
     - **Key**: `items.id` == `auctions.id`.
 
