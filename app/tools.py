@@ -1,4 +1,5 @@
 import os
+import logging
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 import requests
@@ -11,6 +12,23 @@ from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 
 load_dotenv()
 
+# --- Logging Setup ---
+# Use a named logger to avoid being overridden by uvicorn's root logger
+logger = logging.getLogger("ai_agent.tools")
+logger.setLevel(logging.DEBUG)
+
+# Create console handler if not already present
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+    )
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    # Prevent propagation to root logger to avoid duplicate logs
+    logger.propagate = False
+
 # --- Database Setup ---
 db_host = os.getenv("POSTGRES_HOST", "localhost")
 db_port = os.getenv("POSTGRES_PORT", "5555")
@@ -20,8 +38,13 @@ db_url = os.getenv(
     "POSTGRES_URL", "postgresql://{db_user}:{db_password}@{db_host}:{db_port}"
 )
 
+logger.info(f"Connecting to catalogue_db at {db_url}/catalogue_db")
 catalogue_db = SQLDatabase.from_uri(f"{db_url}/catalogue_db")
+logger.info("Connected to catalogue_db successfully")
+
+logger.info(f"Connecting to auction_db at {db_url}/auction_db")
 auction_db = SQLDatabase.from_uri(f"{db_url}/auction_db")
+logger.info("Connected to auction_db successfully")
 
 model = ChatOpenAI(model=os.getenv("LLM_MODEL", "gpt-5-nano-2025-08-07"))
 
@@ -59,8 +82,13 @@ def handle_api_errors(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        func_name = func.__name__
+        logger.info(f"[TOOL CALL] {func_name} called with args={args}, kwargs={kwargs}")
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            logger.info(f"[TOOL SUCCESS] {func_name} returned successfully")
+            logger.debug(f"[TOOL RESULT] {func_name} result: {result}")
+            return result
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
             try:
@@ -68,8 +96,12 @@ def handle_api_errors(func):
                 server_msg = error_body.get("message", e.response.text)
             except ValueError:
                 server_msg = e.response.text or "No error details provided."
+            logger.error(
+                f"[TOOL ERROR] {func_name} API error: {status_code} - {server_msg}"
+            )
             return f"API_ERROR: {status_code} - {server_msg}"
         except Exception as e:
+            logger.exception(f"[TOOL ERROR] {func_name} failed with exception: {e}")
             return f"SYSTEM_ERROR: Internal tool execution failed. {str(e)}"
 
     return wrapper
