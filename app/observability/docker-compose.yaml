@@ -9,8 +9,10 @@ services:
       - 9090:9090  # [Optional] PROMETHEUS PORT IF ENABLED
     environment:
       - PHOENIX_SQL_DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+    networks:
+      - cash-net
   db:
-    image: postgres
+    image: postgres:17-alpine
     restart: always
     environment:
       - POSTGRES_USER=postgres
@@ -20,6 +22,14 @@ services:
       - 5432
     volumes:
       - database_data:/var/lib/postgresql/data
+    networks:
+      - cash-net
+
+networks:
+  cash-net:
+    external: true
+    name: cash-ecomm_cash-net
+
 volumes:
   database_data:
     driver: local
