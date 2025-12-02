@@ -8,7 +8,7 @@ from langchain.messages import HumanMessage, AIMessage, SystemMessage
 from app.agent import agent
 from app.tools import jwt_token_context
 
-# tracer_provider = register(project_name="Chat API Test 2", auto_instrument=True)
+tracer_provider = register(project_name="Chat API Test 2", auto_instrument=True)
 
 app = FastAPI(
     title="Auction Chat API",
